@@ -433,6 +433,38 @@ Example format:
         
         return total_pages
     
+    def get_pdfs_sorted_by_page_count(self, folder_path: Path, limit: Optional[int] = None) -> List[Path]:
+        """Get PDFs sorted by page count (smallest to largest)"""
+        pdf_info = []
+        
+        try:
+            for pdf_file in folder_path.glob("*.pdf"):
+                try:
+                    doc = fitz.open(str(pdf_file))
+                    page_count = len(doc)
+                    doc.close()
+                    pdf_info.append((pdf_file, page_count))
+                except Exception as e:
+                    logger.warning(f"Error counting pages in {pdf_file}: {e}")
+                    # Include the file with 0 pages to still process it
+                    pdf_info.append((pdf_file, 0))
+        except Exception as e:
+            logger.error(f"Error accessing folder {folder_path}: {e}")
+            return []
+        
+        # Sort by page count (smallest first)
+        pdf_info.sort(key=lambda x: x[1])
+        
+        # Extract just the file paths
+        sorted_pdfs = [pdf_path for pdf_path, _ in pdf_info]
+        
+        # Apply limit if specified
+        if limit:
+            sorted_pdfs = sorted_pdfs[:limit]
+            logger.info(f"    Limited to {limit} smallest PDFs by page count")
+        
+        return sorted_pdfs
+    
     def process_all_districts(self, limit_districts: Optional[int] = None, 
                             limit_pdfs_per_round: Optional[int] = None):
         """Process all districts and create comprehensive CSV"""
@@ -483,10 +515,9 @@ Example format:
                     
                     # Count pages and PDFs for summary
                     page_count = self.count_pdf_pages_in_folder(folder_path)
-                    pdf_files = list(folder_path.glob("*.pdf"))
                     
-                    if limit_pdfs_per_round:
-                        pdf_files = pdf_files[:limit_pdfs_per_round]
+                    # Get PDFs sorted by page count (smallest to largest)
+                    pdf_files = self.get_pdfs_sorted_by_page_count(folder_path, limit_pdfs_per_round)
                     
                     summary_row[f'Round_{round_num}_Pages'] = page_count
                     summary_row[f'Round_{round_num}_PDFs'] = len(pdf_files)
