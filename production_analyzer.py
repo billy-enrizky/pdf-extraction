@@ -613,8 +613,8 @@ def main():
         # For testing, limit to first 10 districts and 5 PDFs per round
         # Remove these limits for full processing
         analyzer.process_all_districts(
-            limit_districts=10,  # Remove this line for all districts
-            limit_pdfs_per_round=5  # Remove this line for all PDFs
+            limit_districts=3,  # Remove this line for all districts
+            limit_pdfs_per_round=3  # Remove this line for all PDFs
         )
         
     except KeyboardInterrupt:
