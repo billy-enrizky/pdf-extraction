@@ -1,0 +1,4 @@
+District,Software_Count,Unique_Vendors,Total_Cost,Records_with_Cost,Rounds
+Agawam,235,78,428666.87,222,"[np.int64(1), np.int64(2), np.int64(3), np.int64(4)]"
+Barkhamsted,65,31,96891.0,65,"[np.int64(2), np.int64(3)]"
+Ashford,27,13,30007.0,20,"[np.int64(2), np.int64(4)]"
