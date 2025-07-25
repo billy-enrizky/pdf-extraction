@@ -31,7 +31,7 @@ def check_requirements():
         return False
     
     # Check data folder
-    data_folder = Path("/Users/billy/Documents/pdf-extraction/RA_tasks_2025")
+    data_folder = Path("RA_tasks_2025")
     if data_folder.exists():
         districts = len([d for d in data_folder.iterdir() if d.is_dir() and d.name != ".DS_Store"])
         print(f"✅ Data folder found with {districts} districts")
@@ -69,7 +69,7 @@ def quick_test():
     
     confirm = input("Continue? (y/n): ").lower()
     if confirm == 'y':
-        os.system("cd /Users/billy/Documents/pdf-extraction && conda activate pdf-analyzer && python quick_test.py")
+        os.system("python quick_test.py")
     else:
         print("Quick test cancelled.")
 
@@ -81,7 +81,7 @@ def limited_analysis():
     
     confirm = input("Continue? (y/n): ").lower()
     if confirm == 'y':
-        os.system("cd /Users/billy/Documents/pdf-extraction && conda activate pdf-analyzer && python production_analyzer.py")
+        os.system("python production_analyzer.py")
     else:
         print("Limited analysis cancelled.")
 
@@ -96,7 +96,7 @@ def complete_analysis():
     confirm = input("Are you sure you want to proceed? (yes/no): ").lower()
     if confirm == 'yes':
         print("\nStarting complete analysis...")
-        os.system("cd /Users/billy/Documents/pdf-extraction && conda activate pdf-analyzer && python run_complete_analysis.py")
+        os.system("python run_complete_analysis.py")
     else:
         print("Complete analysis cancelled.")
 
@@ -104,7 +104,7 @@ def view_results():
     """View results and generate reports"""
     print("\n📊 VIEWING RESULTS...")
     
-    results_dir = Path("/Users/billy/Documents/pdf-extraction/results")
+    results_dir = Path("results")
     if not results_dir.exists():
         print("❌ No results directory found. Run an analysis first.")
         return
@@ -116,14 +116,14 @@ def view_results():
         return
     
     print(f"✅ Found {len(csv_files)} results files")
-    os.system("cd /Users/billy/Documents/pdf-extraction && conda activate pdf-analyzer && python view_results.py")
+    os.system("python view_results.py")
 
 def check_status():
     """Check processing status"""
     print("\n📈 CHECKING STATUS...")
     
     # Check results directory
-    results_dir = Path("/Users/billy/Documents/pdf-extraction/results")
+    results_dir = Path("results")
     if results_dir.exists():
         files = list(results_dir.glob("*.csv"))
         if files:
@@ -136,7 +136,7 @@ def check_status():
         print("📂 No results directory found")
     
     # Check log file
-    log_file = Path("/Users/billy/Documents/pdf-extraction/processing.log")
+    log_file = Path("processing.log")
     if log_file.exists():
         print(f"📋 Log file exists: {log_file.stat().st_size} bytes")
         print("📄 Last 10 lines of log:")
@@ -162,7 +162,7 @@ def show_file_descriptions():
     }
     
     for filename, description in files.items():
-        status = "✅" if Path(f"/Users/billy/Documents/pdf-extraction/{filename}").exists() else "❌"
+        status = "✅" if Path(f"{filename}").exists() else "❌"
         print(f"{status} {filename:<25} - {description}")
 
 def main():
