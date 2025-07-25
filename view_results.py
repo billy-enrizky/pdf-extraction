@@ -96,7 +96,7 @@ def analyze_results():
             'Software': 'count',
             'Vendor': 'nunique',
             'Cost_total_numeric': ['sum', 'count'],
-            'Round': lambda x: list(x.unique())
+            'Round': lambda x: [str(r) for r in x.unique()]
         }).round(2)
         
         district_report.columns = ['Software_Count', 'Unique_Vendors', 'Total_Cost', 'Records_with_Cost', 'Rounds']
@@ -112,7 +112,7 @@ def analyze_results():
             'Software': 'count',
             'District': 'nunique',
             'Cost_total_numeric': ['sum', 'count'],
-            'Round': lambda x: list(x.unique())
+            'Round': lambda x: [str(r) for r in x.unique()]
         }).round(2)
         
         vendor_report.columns = ['Software_Count', 'Districts_Served', 'Total_Revenue', 'Records_with_Cost', 'Rounds']
@@ -128,7 +128,7 @@ def analyze_results():
             'District': 'nunique',
             'Vendor': 'first',
             'Cost_total_numeric': ['sum', 'mean', 'count'],
-            'Round': lambda x: list(x.unique())
+            'Round': lambda x: [str(r) for r in x.unique()]
         }).round(2)
         
         software_report.columns = ['Districts_Using', 'Primary_Vendor', 'Total_Cost', 'Avg_Cost', 'Records_with_Cost', 'Rounds']
