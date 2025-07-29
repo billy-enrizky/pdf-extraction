@@ -110,7 +110,7 @@ Generates analysis reports and summary statistics from extracted data.
 
 ## Output Files
 
-### Location: `/Users/billy/Documents/pdf-extraction/results/`
+### Location: `results/`
 
 ### Main Output Files:
 - **`extracted_software_data.csv`** - Complete detailed records

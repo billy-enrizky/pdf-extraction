@@ -10,6 +10,7 @@ import base64
 import json
 import re
 import requests
+import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import fitz  # PyMuPDF
@@ -27,7 +28,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/Users/billy/Documents/pdf-extraction/processing.log'),
+        logging.FileHandler('processing.log'),
         logging.StreamHandler()
     ]
 )
@@ -94,8 +95,8 @@ class ProductionPDFAnalyzer:
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
         
-        self.base_dir = Path("/Users/billy/Documents/pdf-extraction/RA_tasks_2025")
-        self.output_dir = Path("/Users/billy/Documents/pdf-extraction/results")
+        self.base_dir = Path("RA_tasks_2025")
+        self.output_dir = Path("results")
         self.output_dir.mkdir(exist_ok=True)
         
         # Round mapping for case-insensitive matching
@@ -465,8 +466,57 @@ Example format:
         
         return sorted_pdfs
     
+    def get_available_districts(self) -> List[str]:
+        """Get list of all available district names"""
+        district_names = []
+        if self.base_dir.exists():
+            for item in self.base_dir.iterdir():
+                if item.is_dir() and item.name not in [".DS_Store", "__pycache__"]:
+                    district_names.append(item.name)
+        return sorted(district_names)
+    
+    def filter_districts_by_name(self, district_names: List[str], all_districts: List[Path]) -> List[Path]:
+        """Filter district folders by name(s), supporting partial matches"""
+        if not district_names:
+            return all_districts
+        
+        filtered_districts = []
+        available_names = [d.name for d in all_districts]
+        
+        for target_name in district_names:
+            # First try exact match (case-insensitive)
+            exact_matches = [d for d in all_districts if d.name.lower() == target_name.lower()]
+            if exact_matches:
+                filtered_districts.extend(exact_matches)
+                continue
+            
+            # Then try partial match (case-insensitive)
+            partial_matches = [d for d in all_districts if target_name.lower() in d.name.lower()]
+            if partial_matches:
+                if len(partial_matches) == 1:
+                    filtered_districts.extend(partial_matches)
+                    logger.info(f"Found partial match for '{target_name}': {partial_matches[0].name}")
+                else:
+                    logger.warning(f"Multiple partial matches for '{target_name}': {[d.name for d in partial_matches]}")
+                    logger.warning("Please be more specific. Using all matches.")
+                    filtered_districts.extend(partial_matches)
+            else:
+                logger.error(f"No district found matching '{target_name}'")
+                logger.info(f"Available districts: {', '.join(available_names)}")
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_districts = []
+        for district in filtered_districts:
+            if district not in seen:
+                seen.add(district)
+                unique_districts.append(district)
+        
+        return unique_districts
+
     def process_all_districts(self, limit_districts: Optional[int] = None, 
-                            limit_pdfs_per_round: Optional[int] = None):
+                            limit_pdfs_per_round: Optional[int] = None,
+                            district_names: Optional[List[str]] = None):
         """Process all districts and create comprehensive CSV"""
         start_time = datetime.now()
         logger.info(f"Starting comprehensive PDF analysis at {start_time}")
@@ -475,8 +525,18 @@ Example format:
         summary_data = []
         
         # Get all district folders
-        district_folders = [d for d in self.base_dir.iterdir() 
-                          if d.is_dir() and d.name not in [".DS_Store", "__pycache__"]]
+        all_district_folders = [d for d in self.base_dir.iterdir() 
+                              if d.is_dir() and d.name not in [".DS_Store", "__pycache__"]]
+        
+        # Filter by district names if specified
+        if district_names:
+            district_folders = self.filter_districts_by_name(district_names, all_district_folders)
+            if not district_folders:
+                logger.error("No matching districts found. Exiting.")
+                return
+            logger.info(f"Filtering to specific districts: {[d.name for d in district_folders]}")
+        else:
+            district_folders = all_district_folders
         
         if limit_districts:
             district_folders = sorted(district_folders)[:limit_districts]
@@ -636,16 +696,105 @@ Example format:
             for row in summary_data:
                 writer.writerow(row)
 
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description="Production PDF Analyzer for Educational Software Data Extraction",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Process all districts (limited for testing)
+  python production_analyzer.py
+  
+  # Process specific district(s)
+  python production_analyzer.py --districts "Agawam"
+  python production_analyzer.py --districts "Agawam" "Canton" "Douglas"
+  
+  # Process districts with partial matching
+  python production_analyzer.py --districts "East"  # Matches East_Granby, East_Longmeadow, etc.
+  
+  # List all available districts
+  python production_analyzer.py --list-districts
+  
+  # Full production run (all districts, all PDFs)
+  python production_analyzer.py --full-run
+  
+  # Custom limits
+  python production_analyzer.py --limit-districts 5 --limit-pdfs 10
+        """
+    )
+    
+    parser.add_argument(
+        '--districts', 
+        nargs='+',
+        help='Specific district name(s) to process. Supports partial matching.'
+    )
+    
+    parser.add_argument(
+        '--list-districts',
+        action='store_true',
+        help='List all available district names and exit'
+    )
+    
+    parser.add_argument(
+        '--full-run',
+        action='store_true',
+        help='Run full production analysis (all districts, all PDFs)'
+    )
+    
+    parser.add_argument(
+        '--limit-districts',
+        type=int,
+        default=3,
+        help='Maximum number of districts to process (default: 3 for testing)'
+    )
+    
+    parser.add_argument(
+        '--limit-pdfs',
+        type=int,
+        default=3,
+        help='Maximum number of PDFs per round to process (default: 3 for testing)'
+    )
+    
+    return parser.parse_args()
+
 def main():
-    """Main execution function"""
+    """Main execution function with CLI support"""
+    args = parse_arguments()
+    
     try:
         analyzer = ProductionPDFAnalyzer()
         
-        # For testing, limit to first 10 districts and 5 PDFs per round
-        # Remove these limits for full processing
+        # Handle list districts command
+        if args.list_districts:
+            districts = analyzer.get_available_districts()
+            print("\nAvailable Districts:")
+            print("=" * 50)
+            for i, district in enumerate(districts, 1):
+                print(f"{i:2d}. {district}")
+            print(f"\nTotal: {len(districts)} districts")
+            return
+        
+        # Determine processing parameters
+        if args.full_run:
+            # Full production run
+            limit_districts = None
+            limit_pdfs = None
+            logger.info("Running FULL PRODUCTION analysis (all districts, all PDFs)")
+        else:
+            # Use specified limits or defaults
+            limit_districts = args.limit_districts if not args.districts else None
+            limit_pdfs = args.limit_pdfs
+            if args.districts:
+                logger.info(f"Running analysis for specific districts: {args.districts}")
+            else:
+                logger.info(f"Running LIMITED analysis (max {limit_districts} districts, {limit_pdfs} PDFs per round)")
+        
+        # Run the analysis
         analyzer.process_all_districts(
-            limit_districts=3,  # Remove this line for all districts
-            limit_pdfs_per_round=3  # Remove this line for all PDFs
+            limit_districts=limit_districts,
+            limit_pdfs_per_round=limit_pdfs,
+            district_names=args.districts
         )
         
     except KeyboardInterrupt:

@@ -115,9 +115,9 @@ def quick_test():
     
     # Test files
     test_files = [
-        "/Users/billy/Documents/pdf-extraction/RA_tasks_2025/Agawam/R1/Infobase.pdf",
-        "/Users/billy/Documents/pdf-extraction/RA_tasks_2025/Agawam/R1/Renaissance.pdf",
-        "/Users/billy/Documents/pdf-extraction/RA_tasks_2025/Ashford/Round 2/RepQuote153500.5 - ROUND 2.pdf"
+        "RA_tasks_2025/Agawam/R1/Infobase.pdf",
+        "RA_tasks_2025/Agawam/R1/Renaissance.pdf",
+        "RA_tasks_2025/Ashford/Round 2/RepQuote153500.5 - ROUND 2.pdf"
     ]
     
     all_results = []
@@ -171,7 +171,7 @@ def quick_test():
     
     # Save results
     if all_results:
-        output_file = "/Users/billy/Documents/pdf-extraction/quick_test_results.csv"
+        output_file = "quick_test_results.csv"
         
         fieldnames = ['district', 'round', 'source_file', 'software', 'vendor', 'cost_total', 'misc_notes']
         

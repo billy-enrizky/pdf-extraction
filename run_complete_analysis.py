@@ -19,7 +19,7 @@ def run_complete_analysis():
         print("STARTING COMPLETE PDF ANALYSIS")
         print("This will process ALL districts and PDFs")
         print("Estimated time: Several hours")
-        print("Results will be saved to: /Users/billy/Documents/pdf-extraction/results/")
+        print("Results will be saved to: results/")
         print("="*60)
         
         # Run complete analysis - NO LIMITS

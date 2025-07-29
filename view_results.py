@@ -12,7 +12,7 @@ from collections import defaultdict
 def analyze_results():
     """Analyze the extracted results and generate summary reports"""
     
-    results_dir = Path("/Users/billy/Documents/pdf-extraction/results")
+    results_dir = Path("results")
     
     if not results_dir.exists():
         print("Results directory not found. Run the analyzer first.")
@@ -149,7 +149,7 @@ def analyze_results():
 def view_sample_records(n=10):
     """View sample records from the results"""
     
-    results_dir = Path("/Users/billy/Documents/pdf-extraction/results")
+    results_dir = Path("results")
     detailed_files = list(results_dir.glob("*detailed*.csv"))
     
     if not detailed_files:
