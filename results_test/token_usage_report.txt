@@ -1,0 +1,64 @@
+
+================================================================================
+TOKEN USAGE ANALYSIS FOR PDF EXTRACTION PROJECT
+================================================================================
+
+DATASET OVERVIEW:
+- Total PDFs: 1,378
+- Total Pages: 9,947
+- Model: GPT-4 Vision (gpt-4o)
+
+PER-PAGE TOKEN ESTIMATES:
+──────────────────────────────────────────────────
+Input Tokens per Page:
+  • Text prompt: 862 tokens
+  • Image processing: 1,000 tokens
+  • Total input: 1,862 tokens
+
+Output Tokens per Page (scenarios):
+  • Minimal response: 50 tokens
+  • Typical response: 322 tokens
+  • Comprehensive response: 644 tokens
+  • Maximum response: 4,000 tokens
+  • Average expected: 472 tokens
+
+TOTAL PROJECT ESTIMATES:
+──────────────────────────────────────────────────
+Token Usage:
+  • Total input tokens: 18,521,314
+  • Total output tokens: 4,694,984
+  • Combined total: 23,216,298
+
+Cost Estimates (USD):
+  • Input tokens cost: $185.21
+  • Output tokens cost: $140.85
+  • Total estimated cost: $326.06
+
+COST SCENARIOS:
+──────────────────────────────────────────────────
+Minimum Scenario (simple responses):
+  • Total cost: $200.13
+
+Maximum Scenario (complex responses):
+  • Total cost: $1378.85
+
+PROCESSING ESTIMATES:
+──────────────────────────────────────────────────
+API Calls: 9,947 calls (one per page)
+Rate Limiting: 1.5 seconds between calls
+Estimated Processing Time: 4.1 hours
+
+COST BREAKDOWN BY COMPONENT:
+──────────────────────────────────────────────────
+Input Cost Distribution:
+  • Text processing: $85.74
+  • Image processing: $99.47
+
+RECOMMENDATIONS:
+──────────────────────────────────────────────────
+1. Budget for approximately $326.06 in API costs
+2. Plan for 4.1 hours of processing time
+3. Monitor usage during processing to track against estimates
+4. Consider processing in batches to manage costs
+
+================================================================================

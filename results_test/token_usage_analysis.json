@@ -1,0 +1,39 @@
+{
+  "total_pages": 9947,
+  "per_page_estimates": {
+    "input_tokens": {
+      "text_tokens": 862,
+      "image_tokens": 1000,
+      "total_input_tokens": 1862
+    },
+    "output_tokens": {
+      "scenarios": {
+        "minimal_response": 50,
+        "typical_response": 322,
+        "comprehensive_response": 644,
+        "max_response": 4000
+      },
+      "average_output_tokens": 472
+    }
+  },
+  "total_usage": {
+    "total_input_tokens": 18521314,
+    "total_output_tokens": 4694984,
+    "total_tokens": 23216298
+  },
+  "cost_breakdown": {
+    "input_cost": 185.21313999999998,
+    "output_cost": 140.84952,
+    "total_cost": 326.06266
+  },
+  "usage_ranges": {
+    "min_scenario": {
+      "output_tokens": 497350,
+      "total_cost": 200.13363999999999
+    },
+    "max_scenario": {
+      "output_tokens": 39788000,
+      "total_cost": 1378.85314
+    }
+  }
+}
