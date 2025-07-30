@@ -245,7 +245,16 @@ class ProductionPDFAnalyzer:
     
     def analyze_page_with_gpt(self, image_bytes: bytes, text_content: str, 
                              district: str, round_num: str, pdf_name: str, page_num: int) -> List[SoftwareRecord]:
-        """Send page to GPT for analysis and extract software information"""
+        """
+        Send page to GPT for analysis and extract software information
+        
+        Features automatic retry logic with:
+        - Maximum 3 retry attempts for API failures
+        - Exponential backoff (2s, 3s, 4.5s delays)
+        - Separate handling for different error types (RequestException, JSONDecodeError, etc.)
+        - Detailed logging of retry attempts
+        - Returns empty list if all retries are exhausted
+        """
         
         if not image_bytes:
             return []
@@ -360,80 +369,108 @@ Example format:
             "temperature": 0.1
         }
         
-        try:
-            self.stats['api_calls_made'] += 1
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            content = result['choices'][0]['message']['content'].strip()
-            
-            # Parse JSON response
+        # Retry logic for API calls
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
             try:
-                # Clean up the response
-                if content.startswith('```json'):
-                    content = content.split('```json')[1].split('```')[0]
-                elif content.startswith('```'):
-                    content = content.split('```')[1].split('```')[0]
+                logger.debug(f"API attempt {attempt + 1}/{max_retries} for {pdf_name} page {page_num+1}")
+                self.stats['api_calls_made'] += 1
+                response = requests.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60
+                )
+                response.raise_for_status()
                 
-                extracted_data = json.loads(content)
+                result = response.json()
+                content = result['choices'][0]['message']['content'].strip()
                 
-                # Convert to SoftwareRecord objects
-                records = []
-                for item in extracted_data:
-                    # Validate and clean data
-                    contract_year = str(item.get('contract_start_year', ''))
-                    if contract_year and not self.validate_round_year(round_num, contract_year):
-                        item['misc_notes'] = f"{item.get('misc_notes', '')} [Year-Round mismatch noted]".strip()
+                # Parse JSON response
+                try:
+                    # Clean up the response
+                    if content.startswith('```json'):
+                        content = content.split('```json')[1].split('```')[0]
+                    elif content.startswith('```'):
+                        content = content.split('```')[1].split('```')[0]
                     
-                    record = SoftwareRecord(
-                        district=district,
-                        round=round_num,
-                        source_file=pdf_name,
-                        page_number=str(page_num + 1),
-                        software=item.get('software', ''),
-                        vendor=item.get('vendor', ''),
-                        school_name=item.get('school_name', ''),
-                        approx_level=item.get('approx_level', ''),
-                        use_type=item.get('use_type', ''),
-                        host_type=item.get('host_type', ''),
-                        num_school_lic=str(item.get('num_school_lic', '')),
-                        num_district_lic=str(item.get('num_district_lic', '')),
-                        cost_per_lic=str(item.get('cost_per_lic', '')),
-                        cost_total=str(item.get('cost_total', '')),
-                        contract_start_month=item.get('contract_start_month', ''),
-                        contract_start_year=str(item.get('contract_start_year', '')),
-                        contract_length_years=str(item.get('contract_length_years', '')),
-                        install_month=item.get('install_month', ''),
-                        install_year=str(item.get('install_year', '')),
-                        quote_month=item.get('quote_month', ''),
-                        quote_year=str(item.get('quote_year', '')),
-                        misc_notes=item.get('misc_notes', '')
-                    )
-                    records.append(record)
-                
-                self.stats['software_records_extracted'] += len(records)
-                return records
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON parsing error for {pdf_name} page {page_num+1}: {e}")
-                logger.debug(f"Raw content: {content[:500]}...")
-                self.stats['errors_encountered'] += 1
-                return []
-                
-        except requests.exceptions.RequestException as e:
-            logger.error(f"API request error for {pdf_name} page {page_num+1}: {e}")
-            self.stats['errors_encountered'] += 1
-            return []
-        except Exception as e:
-            logger.error(f"Unexpected error analyzing {pdf_name} page {page_num+1}: {e}")
-            self.stats['errors_encountered'] += 1
-            return []
+                    extracted_data = json.loads(content)
+                    
+                    # Convert to SoftwareRecord objects
+                    records = []
+                    for item in extracted_data:
+                        # Validate and clean data
+                        contract_year = str(item.get('contract_start_year', ''))
+                        if contract_year and not self.validate_round_year(round_num, contract_year):
+                            item['misc_notes'] = f"{item.get('misc_notes', '')} [Year-Round mismatch noted]".strip()
+                        
+                        record = SoftwareRecord(
+                            district=district,
+                            round=round_num,
+                            source_file=pdf_name,
+                            page_number=str(page_num + 1),
+                            software=item.get('software', ''),
+                            vendor=item.get('vendor', ''),
+                            school_name=item.get('school_name', ''),
+                            approx_level=item.get('approx_level', ''),
+                            use_type=item.get('use_type', ''),
+                            host_type=item.get('host_type', ''),
+                            num_school_lic=str(item.get('num_school_lic', '')),
+                            num_district_lic=str(item.get('num_district_lic', '')),
+                            cost_per_lic=str(item.get('cost_per_lic', '')),
+                            cost_total=str(item.get('cost_total', '')),
+                            contract_start_month=item.get('contract_start_month', ''),
+                            contract_start_year=str(item.get('contract_start_year', '')),
+                            contract_length_years=str(item.get('contract_length_years', '')),
+                            install_month=item.get('install_month', ''),
+                            install_year=str(item.get('install_year', '')),
+                            quote_month=item.get('quote_month', ''),
+                            quote_year=str(item.get('quote_year', '')),
+                            misc_notes=item.get('misc_notes', '')
+                        )
+                        records.append(record)
+                    
+                    self.stats['software_records_extracted'] += len(records)
+                    logger.debug(f"Successfully extracted {len(records)} records on attempt {attempt + 1}")
+                    return records
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON parsing error for {pdf_name} page {page_num+1} attempt {attempt + 1}: {e}")
+                    logger.debug(f"Raw content: {content[:500]}...")
+                    if attempt == max_retries - 1:  # Last attempt
+                        self.stats['errors_encountered'] += 1
+                        return []
+                    continue  # Try again
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"API request error for {pdf_name} page {page_num+1} attempt {attempt + 1}: {e}")
+                if attempt == max_retries - 1:  # Last attempt
+                    logger.error(f"Final API request failure for {pdf_name} page {page_num+1} after {max_retries} attempts")
+                    self.stats['errors_encountered'] += 1
+                    return []
+                else:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5  # Exponential backoff
+                    continue
+                    
+            except Exception as e:
+                logger.warning(f"Unexpected error analyzing {pdf_name} page {page_num+1} attempt {attempt + 1}: {e}")
+                if attempt == max_retries - 1:  # Last attempt
+                    logger.error(f"Final unexpected error for {pdf_name} page {page_num+1} after {max_retries} attempts")
+                    self.stats['errors_encountered'] += 1
+                    return []
+                else:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5  # Exponential backoff
+                    continue
+        
+        # Should never reach here due to return statements above
+        self.stats['errors_encountered'] += 1
+        return []
     
     def process_pdf(self, pdf_path: Path, district: str, round_num: str) -> List[SoftwareRecord]:
         """Process a single PDF file"""
