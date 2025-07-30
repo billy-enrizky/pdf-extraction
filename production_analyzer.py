@@ -381,7 +381,7 @@ Example format:
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=60
+                    timeout=3600
                 )
                 response.raise_for_status()
                 
