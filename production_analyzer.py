@@ -366,7 +366,7 @@ Example format:
                 }
             ],
             "max_tokens": 4000,
-            "temperature": 0.1
+            "temperature": 0.0
         }
         
         # Retry logic for API calls
