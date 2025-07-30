@@ -319,6 +319,14 @@ EXTRACTION RULES:
 7. Include renewal subscriptions and maintenance contracts
 8. If document lists software without details, still include it with available info
 
+CRITICAL JSON FORMATTING REQUIREMENTS:
+- Return ONLY a valid JSON array of objects, no other text
+- Ensure all strings are properly quoted and escaped
+- Do not include trailing commas
+- End all strings properly with closing quotes
+- If no software is found, return []
+- Validate JSON format before returning
+
 Return ONLY a valid JSON array of objects. If no software is found, return [].
 
 Example format:
@@ -396,7 +404,11 @@ Example format:
                     elif content.startswith('```'):
                         content = content.split('```')[1].split('```')[0]
                     
-                    extracted_data = json.loads(content)
+                    # Additional cleaning for common JSON issues
+                    content = content.strip()
+                    
+                    # Try to parse JSON with multiple strategies
+                    extracted_data = self.parse_json_with_recovery(content, pdf_name, page_num, attempt)
                     
                     # Convert to SoftwareRecord objects
                     records = []
@@ -471,6 +483,98 @@ Example format:
         # Should never reach here due to return statements above
         self.stats['errors_encountered'] += 1
         return []
+    
+    def parse_json_with_recovery(self, content: str, pdf_name: str, page_num: int, attempt: int) -> List[Dict]:
+        """
+        Parse JSON with multiple recovery strategies for malformed responses
+        """
+        # Strategy 1: Direct parsing
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.debug(f"Direct JSON parsing failed for {pdf_name} page {page_num+1}: {e}")
+        
+        # Strategy 2: Try to fix common JSON issues
+        try:
+            # Remove any trailing commas
+            fixed_content = re.sub(r',\s*([}\]])', r'\1', content)
+            
+            # Try to fix unterminated strings by finding the last complete object
+            if '"' in fixed_content:
+                # Count quotes to see if we have unmatched quotes
+                quote_count = fixed_content.count('"') - fixed_content.count('\\"')
+                if quote_count % 2 != 0:
+                    # Find the last complete JSON object/array
+                    last_complete = self.find_last_complete_json(fixed_content)
+                    if last_complete:
+                        return json.loads(last_complete)
+            
+            return json.loads(fixed_content)
+        except json.JSONDecodeError as e:
+            logger.debug(f"JSON fix attempt failed for {pdf_name} page {page_num+1}: {e}")
+        
+        # Strategy 3: Try to extract just the array part
+        try:
+            # Look for array patterns
+            array_match = re.search(r'\[.*\]', content, re.DOTALL)
+            if array_match:
+                array_content = array_match.group()
+                return json.loads(array_content)
+        except json.JSONDecodeError as e:
+            logger.debug(f"Array extraction failed for {pdf_name} page {page_num+1}: {e}")
+        
+        # Strategy 4: Try to parse partial content
+        try:
+            # Find individual objects within the response
+            objects = self.extract_json_objects(content)
+            if objects:
+                return objects
+        except Exception as e:
+            logger.debug(f"Object extraction failed for {pdf_name} page {page_num+1}: {e}")
+        
+        # Strategy 5: Last resort - return empty list and log the full content
+        logger.warning(f"All JSON recovery strategies failed for {pdf_name} page {page_num+1} attempt {attempt+1}")
+        logger.debug(f"Failed content (first 1000 chars): {content[:1000]}")
+        raise json.JSONDecodeError("All recovery strategies failed", content, 0)
+    
+    def find_last_complete_json(self, content: str) -> Optional[str]:
+        """
+        Find the last complete JSON structure in malformed content
+        """
+        try:
+            # Start from the beginning and try to find the longest valid JSON
+            for i in range(len(content), 0, -1):
+                test_content = content[:i]
+                try:
+                    json.loads(test_content)
+                    return test_content
+                except json.JSONDecodeError:
+                    continue
+            return None
+        except Exception:
+            return None
+    
+    def extract_json_objects(self, content: str) -> List[Dict]:
+        """
+        Extract individual JSON objects from malformed content
+        """
+        objects = []
+        try:
+            # Look for object patterns
+            object_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+            matches = re.findall(object_pattern, content, re.DOTALL)
+            
+            for match in matches:
+                try:
+                    obj = json.loads(match)
+                    if isinstance(obj, dict) and obj.get('software'):  # Basic validation
+                        objects.append(obj)
+                except json.JSONDecodeError:
+                    continue
+            
+            return objects
+        except Exception:
+            return []
     
     def process_pdf(self, pdf_path: Path, district: str, round_num: str) -> List[SoftwareRecord]:
         """Process a single PDF file"""
@@ -912,8 +1016,8 @@ Examples:
     parser.add_argument(
         '--limit-pdfs',
         type=int,
-        default=3,
-        help='Maximum number of PDFs per round to process (default: 3 for testing)'
+        default=10000,
+        help='Maximum number of PDFs per round to process (default: 10000 for testing)'
     )
     
     parser.add_argument(
