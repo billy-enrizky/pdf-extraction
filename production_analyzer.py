@@ -11,8 +11,9 @@ import json
 import re
 import requests
 import argparse
+import pickle
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
 import time
@@ -99,6 +100,14 @@ class ProductionPDFAnalyzer:
         self.output_dir = Path("results")
         self.output_dir.mkdir(exist_ok=True)
         
+        # Persistent tracking files
+        self.processed_pdfs_file = self.output_dir / "processed_pdfs.json"
+        self.main_csv_file = self.output_dir / "extracted_software_data.csv"
+        self.summary_csv_file = self.output_dir / "district_summary.csv"
+        
+        # Load previously processed PDFs
+        self.processed_pdfs: Set[str] = self.load_processed_pdfs()
+        
         # Round mapping for case-insensitive matching
         self.round_patterns = {
             'r1': '1', 'round 1': '1', 'round1': '1',
@@ -126,6 +135,75 @@ class ProductionPDFAnalyzer:
             'errors_encountered': 0
         }
         
+    def load_processed_pdfs(self) -> Set[str]:
+        """Load the set of previously processed PDF files"""
+        try:
+            if self.processed_pdfs_file.exists():
+                with open(self.processed_pdfs_file, 'r') as f:
+                    data = json.load(f)
+                    processed_set = set(data.get('processed_pdfs', []))
+                    logger.info(f"Loaded {len(processed_set)} previously processed PDFs from tracking file")
+                    return processed_set
+            else:
+                logger.info("No previous tracking file found. Starting fresh.")
+                return set()
+        except Exception as e:
+            logger.warning(f"Error loading processed PDFs tracking file: {e}. Starting fresh.")
+            return set()
+    
+    def save_processed_pdfs(self):
+        """Save the current set of processed PDFs to persistent storage"""
+        try:
+            data = {
+                'processed_pdfs': list(self.processed_pdfs),
+                'last_updated': datetime.now().isoformat(),
+                'total_processed': len(self.processed_pdfs)
+            }
+            with open(self.processed_pdfs_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.debug(f"Saved {len(self.processed_pdfs)} processed PDFs to tracking file")
+        except Exception as e:
+            logger.error(f"Error saving processed PDFs tracking file: {e}")
+    
+    def clear_tracking_file(self):
+        """Clear the processed PDFs tracking file"""
+        try:
+            if self.processed_pdfs_file.exists():
+                self.processed_pdfs_file.unlink()
+                self.processed_pdfs = set()
+                logger.info("Processed PDFs tracking file cleared. Starting fresh.")
+            else:
+                logger.info("No tracking file found to clear.")
+        except Exception as e:
+            logger.error(f"Error clearing tracking file: {e}")
+    
+    def show_status(self):
+        """Show processing status and previously processed PDFs count"""
+        logger.info(f"Processed PDFs count: {len(self.processed_pdfs)}")
+        if self.processed_pdfs_file.exists():
+            logger.info(f"Tracking file last updated: {self.processed_pdfs_file.stat().st_mtime}")
+        else:
+            logger.info("No tracking file found.")
+    
+    def get_pdf_identifier(self, pdf_path: Path, district: str, round_num: str) -> str:
+        """Create a unique identifier for a PDF file"""
+        # Use relative path from base_dir + district + round for uniqueness
+        return f"{district}/{round_num}/{pdf_path.name}"
+    
+    def is_pdf_already_processed(self, pdf_path: Path, district: str, round_num: str) -> bool:
+        """Check if a PDF has already been processed"""
+        pdf_id = self.get_pdf_identifier(pdf_path, district, round_num)
+        return pdf_id in self.processed_pdfs
+    
+    def mark_pdf_as_processed(self, pdf_path: Path, district: str, round_num: str):
+        """Mark a PDF as processed"""
+        pdf_id = self.get_pdf_identifier(pdf_path, district, round_num)
+        self.processed_pdfs.add(pdf_id)
+        
+        # Save to persistent storage every 5 PDFs
+        if len(self.processed_pdfs) % 5 == 0:
+            self.save_processed_pdfs()
+    
     def normalize_round_name(self, folder_name: str) -> Optional[str]:
         """Convert folder name to round number with special case handling"""
         folder_lower = folder_name.lower().strip()
@@ -361,6 +439,10 @@ Example format:
         """Process a single PDF file"""
         logger.info(f"Processing {pdf_path.name} from {district} Round {round_num}")
         
+        if self.is_pdf_already_processed(pdf_path, district, round_num):
+            logger.info(f"Skipping already processed PDF: {pdf_path.name}")
+            return []
+        
         try:
             doc = fitz.open(str(pdf_path))
             total_pages = len(doc)
@@ -387,6 +469,9 @@ Example format:
             
             self.stats['pdfs_processed'] += 1
             logger.info(f"  Extracted {len(all_records)} software records from {pdf_path.name}")
+            
+            # Mark as processed
+            self.mark_pdf_as_processed(pdf_path, district, round_num)
             return all_records
             
         except Exception as e:
@@ -633,33 +718,44 @@ Example format:
         
         # Save detailed records
         detailed_file = self.output_dir / f"intermediate_detailed_{timestamp}.csv"
-        self.write_detailed_csv(records, detailed_file)
+        self.write_detailed_csv(records, detailed_file, append_mode=False)
         
         # Save summary
         summary_file = self.output_dir / f"intermediate_summary_{timestamp}.csv"
-        self.write_summary_csv(summary_data, summary_file)
+        self.write_summary_csv(summary_data, summary_file, append_mode=False)
+        
+        # Also append to main files for incremental building
+        self.write_detailed_csv(records, self.main_csv_file, append_mode=True)
+        self.write_summary_csv(summary_data, self.summary_csv_file, append_mode=True)
+        
+        # Save processed PDFs tracking
+        self.save_processed_pdfs()
         
         logger.info(f"Intermediate results saved: {len(records)} records, {len(summary_data)} districts")
     
     def save_final_results(self, records: List[SoftwareRecord], summary_data: List[Dict]):
-        """Save final results"""
+        """Save final results with append functionality"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Save detailed records
+        # Save timestamped backup files (always new files)
         detailed_file = self.output_dir / f"final_detailed_results_{timestamp}.csv"
-        self.write_detailed_csv(records, detailed_file)
+        self.write_detailed_csv(records, detailed_file, append_mode=False)
         
-        # Save summary
         summary_file = self.output_dir / f"final_district_summary_{timestamp}.csv"
-        self.write_summary_csv(summary_data, summary_file)
+        self.write_summary_csv(summary_data, summary_file, append_mode=False)
         
-        # Also save to default names for convenience
-        self.write_detailed_csv(records, self.output_dir / "extracted_software_data.csv")
-        self.write_summary_csv(summary_data, self.output_dir / "district_summary.csv")
+        # Append to main files (or create if they don't exist)
+        self.write_detailed_csv(records, self.main_csv_file, append_mode=True)
+        self.write_summary_csv(summary_data, self.summary_csv_file, append_mode=True)
+        
+        # Save processed PDFs tracking
+        self.save_processed_pdfs()
         
         logger.info(f"Final results saved to {self.output_dir}")
+        logger.info(f"Main CSV files updated: {self.main_csv_file.name}, {self.summary_csv_file.name}")
+        logger.info(f"Backup files created: {detailed_file.name}, {summary_file.name}")
     
-    def write_detailed_csv(self, records: List[SoftwareRecord], output_path: Path):
+    def write_detailed_csv(self, records: List[SoftwareRecord], output_path: Path, append_mode: bool = False):
         """Write all extracted software records to CSV"""
         if not records:
             logger.warning("No records to write")
@@ -674,27 +770,54 @@ Example format:
             'Source_File', 'Page_Number'
         ]
         
-        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+        # Determine if we need to write headers
+        write_headers = not (append_mode and output_path.exists())
+        file_mode = 'a' if append_mode and output_path.exists() else 'w'
+        
+        with open(output_path, file_mode, newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+            
+            if write_headers:
+                writer.writeheader()
             
             for record in records:
                 writer.writerow(record.to_dict())
+        
+        if append_mode and output_path.exists():
+            logger.info(f"Appended {len(records)} records to {output_path}")
+        else:
+            logger.info(f"Wrote {len(records)} records to {output_path}")
     
-    def write_summary_csv(self, summary_data: List[Dict], output_path: Path):
+    def write_summary_csv(self, summary_data: List[Dict], output_path: Path, append_mode: bool = False):
         """Write district summary with page counts and statistics"""
-        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = [
-                'District', 
-                'Round_1_Pages', 'Round_2_Pages', 'Round_3_Pages', 'Round_4_Pages', 'Total_Pages',
-                'Round_1_PDFs', 'Round_2_PDFs', 'Round_3_PDFs', 'Round_4_PDFs', 'Total_PDFs',
-                'Software_Records'
-            ]
+        if not summary_data:
+            logger.warning("No summary data to write")
+            return
+            
+        fieldnames = [
+            'District', 
+            'Round_1_Pages', 'Round_2_Pages', 'Round_3_Pages', 'Round_4_Pages', 'Total_Pages',
+            'Round_1_PDFs', 'Round_2_PDFs', 'Round_3_PDFs', 'Round_4_PDFs', 'Total_PDFs',
+            'Software_Records'
+        ]
+        
+        # Determine if we need to write headers
+        write_headers = not (append_mode and output_path.exists())
+        file_mode = 'a' if append_mode and output_path.exists() else 'w'
+        
+        with open(output_path, file_mode, newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+            
+            if write_headers:
+                writer.writeheader()
             
             for row in summary_data:
                 writer.writerow(row)
+        
+        if append_mode and output_path.exists():
+            logger.info(f"Appended {len(summary_data)} district summaries to {output_path}")
+        else:
+            logger.info(f"Wrote {len(summary_data)} district summaries to {output_path}")
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -756,6 +879,18 @@ Examples:
         help='Maximum number of PDFs per round to process (default: 3 for testing)'
     )
     
+    parser.add_argument(
+        '--status',
+        action='store_true',
+        help='Show processing status and previously processed PDFs count'
+    )
+    
+    parser.add_argument(
+        '--clear-tracking',
+        action='store_true',
+        help='Clear the processed PDFs tracking file to start fresh'
+    )
+    
     return parser.parse_args()
 
 def main():
@@ -773,6 +908,16 @@ def main():
             for i, district in enumerate(districts, 1):
                 print(f"{i:2d}. {district}")
             print(f"\nTotal: {len(districts)} districts")
+            return
+        
+        # Handle status command
+        if args.status:
+            analyzer.show_status()
+            return
+        
+        # Handle clear tracking command
+        if args.clear_tracking:
+            analyzer.clear_tracking_file()
             return
         
         # Determine processing parameters
