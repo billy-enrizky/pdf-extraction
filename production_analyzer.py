@@ -114,6 +114,7 @@ class ProductionPDFAnalyzer:
             'r2': '2', 'round 2': '2', 'round2': '2', 
             'r3': '3', 'round 3': '3', 'round3': '3',
             'r4': '4', 'round 4': '4', 'round4': '4',
+            'r5': '5', 'round 5': '5', 'round5': '5',
             'fy 16-17': '1', 'fy 17-18': '2', 'fy 18-19': '3'  # Special cases like Canton
         }
         
