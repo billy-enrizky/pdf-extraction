@@ -647,8 +647,8 @@ Example format:
         total_pages = 0
         
         try:
-            # Use rglob to find PDFs recursively
-            for pdf_file in folder_path.rglob("*.pdf"):
+            # Use rglob to find PDFs recursively - handle both lowercase and uppercase extensions
+            for pdf_file in list(folder_path.rglob("*.pdf")) + list(folder_path.rglob("*.PDF")):
                 try:
                     doc = fitz.open(str(pdf_file))
                     total_pages += len(doc)
@@ -665,8 +665,8 @@ Example format:
         pdf_info = []
         
         try:
-            # Use rglob to find PDFs recursively
-            for pdf_file in folder_path.rglob("*.pdf"):
+            # Use rglob to find PDFs recursively - handle both lowercase and uppercase extensions
+            for pdf_file in list(folder_path.rglob("*.pdf")) + list(folder_path.rglob("*.PDF")):
                 try:
                     doc = fitz.open(str(pdf_file))
                     page_count = len(doc)
