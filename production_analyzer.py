@@ -206,9 +206,42 @@ class ProductionPDFAnalyzer:
             self.save_processed_pdfs()
     
     def normalize_round_name(self, folder_name: str) -> Optional[str]:
-        """Convert folder name to round number with special case handling"""
+        """Convert folder name to round number with special case handling and pattern matching"""
         folder_lower = folder_name.lower().strip()
-        return self.round_patterns.get(folder_lower)
+        
+        # Direct match from patterns dictionary
+        if folder_lower in self.round_patterns:
+            return self.round_patterns[folder_lower]
+        
+        # Look for round number patterns in the folder name
+        for pattern, round_num in self.round_patterns.items():
+            # Check if the pattern is contained in the folder name
+            if pattern in folder_lower:
+                return round_num
+        
+        # Check for common patterns with regex
+        # Match r1, r2, etc. followed by any character that's not a digit
+        r_match = re.search(r'r([1-5])($|[^0-9])', folder_lower)
+        if r_match:
+            return r_match.group(1)
+        
+        # Match round1, round2, etc. with or without space
+        round_match = re.search(r'round\s*([1-5])($|[^0-9])', folder_lower)
+        if round_match:
+            return round_match.group(1)
+        
+        # Match FY patterns for fiscal years
+        fy_match = re.search(r'fy\s*(1[6-9])[-_/]?1[7-9]', folder_lower)
+        if fy_match:
+            year = fy_match.group(1)
+            if year == '16' or year == '17':
+                return '1'
+            elif year == '18':
+                return '2'
+            elif year == '19':
+                return '3'
+                
+        return None
     
     def validate_round_year(self, round_num: str, year_str: str) -> bool:
         """Validate if round number matches expected year"""
@@ -630,16 +663,58 @@ Example format:
         # Recursively search for round folders (e.g., R1, Round 1, etc.)
         for item in district_path.rglob("*"):
             if item.is_dir():
+                # Check if the folder name itself indicates a round
                 round_num = self.normalize_round_name(item.name)
+                
+                # If not found directly, also check parent folder names
+                if not round_num:
+                    # Check parent folder names for round indicators
+                    for parent in item.parts:
+                        parent_round = self.normalize_round_name(parent)
+                        if parent_round:
+                            round_num = parent_round
+                            break
+                    
+                    # If still not found, check if any parent folder contains a round indicator
+                    if not round_num:
+                        for parent_part in item.parts:
+                            # Check each part of the path for round indicators
+                            for pattern in self.round_patterns:
+                                if pattern in parent_part.lower():
+                                    round_num = self.round_patterns[pattern]
+                                    break
+                            if round_num:
+                                break
+                
+                # Found a round number
                 if round_num:
-                    # Prefer shortest path (shallowest folder) for each round
+                    logger.debug(f"Found round {round_num} folder: {item}")
+                    
+                    # Check if this round already exists in our dictionary
                     if round_num in round_folders:
                         current_path = round_folders[round_num]
-                        # If this path is shallower, prefer it
-                        if len(item.parts) < len(current_path.parts):
+                        
+                        # Count PDFs in both paths to decide which one to use
+                        current_pdf_count = len(list(current_path.glob("**/*.pdf"))) + len(list(current_path.glob("**/*.PDF")))
+                        new_pdf_count = len(list(item.glob("**/*.pdf"))) + len(list(item.glob("**/*.PDF")))
+                        
+                        # Prefer path with more PDFs
+                        if new_pdf_count > current_pdf_count:
                             round_folders[round_num] = item
+                            logger.debug(f"  Preferring {item} over {current_path} ({new_pdf_count} vs {current_pdf_count} PDFs)")
+                        # If equal PDF counts, prefer shallower path
+                        elif new_pdf_count == current_pdf_count and len(item.parts) < len(current_path.parts):
+                            round_folders[round_num] = item
+                            logger.debug(f"  Preferring {item} over {current_path} (shallower path)")
                     else:
                         round_folders[round_num] = item
+        
+        # Log the found round folders
+        if round_folders:
+            logger.info(f"Found {len(round_folders)} round folders: {', '.join([f'Round {k}: {v}' for k, v in round_folders.items()])}")
+        else:
+            logger.warning(f"No round folders found in {district_path}")
+            
         return round_folders
     
     def count_pdf_pages_in_folder(self, folder_path: Path) -> int:
