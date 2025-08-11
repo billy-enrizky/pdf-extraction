@@ -622,26 +622,24 @@ Example format:
             return []
     
     def get_round_folders(self, district_path: Path) -> Dict[str, Path]:
-        """Get all round folders for a district"""
+        """Get all round folders for a district, searching recursively in all subfolders"""
         round_folders = {}
-        
         if not district_path.exists():
             return round_folders
-        
-        for item in district_path.iterdir():
+
+        # Recursively search for round folders (e.g., R1, Round 1, etc.)
+        for item in district_path.rglob("*"):
             if item.is_dir():
                 round_num = self.normalize_round_name(item.name)
                 if round_num:
-                    # Handle duplicate rounds by preferring certain naming patterns
+                    # Prefer shortest path (shallowest folder) for each round
                     if round_num in round_folders:
-                        # Prefer R1, R2, etc. over "Round 1", "round 1"
-                        current_name = round_folders[round_num].name
-                        new_name = item.name
-                        if len(new_name) < len(current_name) or new_name.startswith('R'):
+                        current_path = round_folders[round_num]
+                        # If this path is shallower, prefer it
+                        if len(item.parts) < len(current_path.parts):
                             round_folders[round_num] = item
                     else:
                         round_folders[round_num] = item
-        
         return round_folders
     
     def count_pdf_pages_in_folder(self, folder_path: Path) -> int:
