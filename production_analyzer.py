@@ -645,11 +645,12 @@ Example format:
         return round_folders
     
     def count_pdf_pages_in_folder(self, folder_path: Path) -> int:
-        """Count total pages in all PDFs in a folder"""
+        """Count total pages in all PDFs in a folder and its subfolders (recursive)"""
         total_pages = 0
         
         try:
-            for pdf_file in folder_path.glob("*.pdf"):
+            # Use rglob to find PDFs recursively
+            for pdf_file in folder_path.rglob("*.pdf"):
                 try:
                     doc = fitz.open(str(pdf_file))
                     total_pages += len(doc)
@@ -662,11 +663,12 @@ Example format:
         return total_pages
     
     def get_pdfs_sorted_by_page_count(self, folder_path: Path, limit: Optional[int] = None) -> List[Path]:
-        """Get PDFs sorted by page count (smallest to largest)"""
+        """Get PDFs sorted by page count (smallest to largest), searching recursively in all subfolders"""
         pdf_info = []
         
         try:
-            for pdf_file in folder_path.glob("*.pdf"):
+            # Use rglob to find PDFs recursively
+            for pdf_file in folder_path.rglob("*.pdf"):
                 try:
                     doc = fitz.open(str(pdf_file))
                     page_count = len(doc)
